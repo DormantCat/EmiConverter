@@ -1,8 +1,10 @@
 # Автосборка и публикация релиза.
 #
-# Тег вида v1.0.12 → сборка Windows и Linux → релиз с файлами и SHA256SUMS.txt.
-# Ручной запуск (Actions → Release → Run workflow) только собирает файлы,
-# они доступны на странице запуска в разделе Artifacts, релиз не создаётся.
+# Релиз создаётся двумя способами:
+#   1. Отправить тег вида v1.0.12 (должен совпадать с <Version> в EmiConverter.csproj).
+#   2. Actions → Release → Run workflow с включённой галочкой «Опубликовать релиз».
+#      Тег v<Version> создаётся автоматически на текущем коммите.
+# При ручном запуске без галочки файлы только собираются и лежат в разделе Artifacts.
 
 name: Release
 
@@ -10,6 +12,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Опубликовать релиз (тег v<Version> из EmiConverter.csproj)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -25,24 +32,29 @@ env:
 jobs:
   windows:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
-      - name: Сверить тег с версией в EmiConverter.csproj
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Версия из EmiConverter.csproj
+        id: version
         shell: pwsh
         env:
+          REF_TYPE: ${{ github.ref_type }}
           TAG: ${{ github.ref_name }}
         run: |
           $version = ([xml](Get-Content EmiConverter.csproj)).Project.PropertyGroup.Version
-          if ("v$version" -ne $env:TAG) {
+          if ($env:REF_TYPE -eq 'tag' -and "v$version" -ne $env:TAG) {
             Write-Error "Тег $env:TAG не совпадает с версией $version в EmiConverter.csproj."
             exit 1
           }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Версия: $version"
 
       - name: Сборка
         run: |
@@ -56,7 +68,7 @@ jobs:
           Copy-Item dist/windows-x64/EmiConverter.exe out/EmiConverter-windows-x64.exe
           (Get-FileHash out/EmiConverter-windows-x64.exe -Algorithm SHA256).Hash
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x64
           path: out/EmiConverter-windows-x64.exe
@@ -65,9 +77,9 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -81,7 +93,7 @@ jobs:
           mkdir -p out
           tar -czf out/EmiConverter-linux-x64.tar.gz -C dist linux-x64
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-x64
           path: out/EmiConverter-linux-x64.tar.gz
@@ -91,12 +103,14 @@ jobs:
     # Linux-сборка пока не проверена на реальной системе. Если она упадёт,
     # релиз всё равно выйдет с Windows-файлом, а в описании будет пометка.
     needs: [windows, linux]
-    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.windows.result == 'success'
+    if: >-
+      !cancelled() && needs.windows.result == 'success' &&
+      (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: assets
           merge-multiple: true
@@ -108,11 +122,16 @@ jobs:
       - name: Создать релиз
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.windows.outputs.version }}
           LINUX_RESULT: ${{ needs.linux.result }}
         run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Релиз $TAG уже существует. Поднимите <Version> в EmiConverter.csproj или удалите старый релиз."
+            exit 1
+          fi
           {
-            echo "Автоматическая сборка из тега $TAG."
+            echo "Автоматическая сборка версии $VERSION."
             echo
             echo "- EmiConverter-windows-x64.exe — Windows 10/11 x64, один файл, установка .NET не нужна."
             if [ "$LINUX_RESULT" = "success" ]; then
@@ -122,4 +141,6 @@ jobs:
             fi
             echo "- SHA256SUMS.txt — контрольные суммы файлов."
           } > notes.md
-          gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --title "EMI Converter ${TAG#v}" --notes-file notes.md
+          # --target нужен при ручном запуске: тег создаётся на собранном коммите.
+          gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "EMI Converter $VERSION" --notes-file notes.md
