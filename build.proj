@@ -1,0 +1,17 @@
+<Project DefaultTargets="Publish">
+  <PropertyGroup>
+    <Platform Condition="'$(Platform)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">windows</Platform>
+    <Platform Condition="'$(Platform)' == ''">linux</Platform>
+    <Options>Configuration=Release;SelfContained=true;PublishSingleFile=true;IncludeNativeLibrariesForSelfExtract=true;EnableCompressionInSingleFile=true;EnableSingleFileAnalyzer=false;DebugType=None</Options>
+  </PropertyGroup>
+  <Target Name="Publish">
+    <Error Condition="'$(Platform)' != 'windows' and '$(Platform)' != 'windows7' and '$(Platform)' != 'linux'" Text="Platform must be windows, windows7 or linux."/>
+    <Error Condition="'$(Platform)' == 'linux' and !$([MSBuild]::IsOSPlatform('Linux'))" Text="Build on Linux x64 for the native trace module."/>
+    <PropertyGroup>
+      <Legacy>false</Legacy>
+      <Legacy Condition="'$(Platform)' == 'windows7'">true</Legacy>
+    </PropertyGroup>
+    <MSBuild Condition="'$(Platform)' != 'linux'" Projects="EmiConverter.csproj" Targets="Restore;Publish" RemoveProperties="Platform" Properties="$(Options);LegacyWindows=$(Legacy);EnableWindowsTargeting=true;RuntimeIdentifier=win-x64;PublishDir=$(MSBuildThisFileDirectory)dist/$(Platform)-x64/"/>
+    <MSBuild Condition="'$(Platform)' == 'linux'" Projects="Linux/EmiConverter.Linux.csproj" Targets="Restore;Publish" RemoveProperties="Platform" Properties="$(Options);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildThisFileDirectory)dist/linux-x64/"/>
+  </Target>
+</Project>

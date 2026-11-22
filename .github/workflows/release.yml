@@ -1,0 +1,121 @@
+# Автосборка и публикация релиза.
+#
+# Тег вида v1.0.12 → сборка Windows и Linux → релиз с файлами и SHA256SUMS.txt.
+# Ручной запуск (Actions → Release → Run workflow) только собирает файлы,
+# они доступны на странице запуска в разделе Artifacts, релиз не создаётся.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # SDK 9.0.200 собирает EXE с .NET 9.0.2, как описано в SECURITY-REVIEW.md,
+  # и даёт тот же SHA-256, что и локальная сборка. Если сменить SDK, изменятся
+  # версия .NET внутри EXE и хеш: обновите SECURITY-REVIEW.md.
+  DOTNET_SDK: '9.0.200'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
+
+      - name: Сверить тег с версией в EmiConverter.csproj
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = ([xml](Get-Content EmiConverter.csproj)).Project.PropertyGroup.Version
+          if ("v$version" -ne $env:TAG) {
+            Write-Error "Тег $env:TAG не совпадает с версией $version в EmiConverter.csproj."
+            exit 1
+          }
+
+      - name: Сборка
+        run: dotnet msbuild build.proj -p:Platform=windows
+
+      - name: Подготовить файл
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item dist/windows-x64/EmiConverter.exe out/EmiConverter-windows-x64.exe
+          (Get-FileHash out/EmiConverter-windows-x64.exe -Algorithm SHA256).Hash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: out/EmiConverter-windows-x64.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
+
+      - name: Сборка
+        run: dotnet msbuild build.proj -p:Platform=linux
+
+      - name: Упаковать каталог
+        run: |
+          mkdir -p out
+          tar -czf out/EmiConverter-linux-x64.tar.gz -C dist linux-x64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: out/EmiConverter-linux-x64.tar.gz
+          if-no-files-found: error
+
+  release:
+    # Linux-сборка пока не проверена на реальной системе. Если она упадёт,
+    # релиз всё равно выйдет с Windows-файлом, а в описании будет пометка.
+    needs: [windows, linux]
+    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.windows.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Контрольные суммы
+        working-directory: assets
+        run: sha256sum * | tee SHA256SUMS.txt
+
+      - name: Создать релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+        run: |
+          {
+            echo "Автоматическая сборка из тега $TAG."
+            echo
+            echo "- EmiConverter-windows-x64.exe — Windows 10/11 x64, один файл, установка .NET не нужна."
+            if [ "$LINUX_RESULT" = "success" ]; then
+              echo "- EmiConverter-linux-x64.tar.gz — Linux x64: распаковать каталог целиком и запустить ./EmiConverter. Запуск под Linux не проверялся."
+            else
+              echo "- Сборка Linux не удалась, в этом релизе её нет."
+            fi
+            echo "- SHA256SUMS.txt — контрольные суммы файлов."
+          } > notes.md
+          gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --title "EMI Converter ${TAG#v}" --notes-file notes.md

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>EmiConverter</AssemblyName>
+    <Version>1.0.11</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../MailReader.cs;../DomainLookup.cs;../DossierLookup.cs;../RedirectInspector.cs;../LinuxTrace.cs"/>
+    <PackageReference Include="Avalonia.Desktop" Version="11.1.3"/>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.3"/>
+  </ItemGroup>
+  <Target Name="CompileTrace" BeforeTargets="PrepareForBuild" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <MakeDir Directories="$(IntermediateOutputPath)"/>
+    <Exec Command="cc -O2 -shared -fPIC &quot;$(MSBuildProjectDirectory)/trace.c&quot; -o &quot;$(IntermediateOutputPath)libemi_trace.so&quot;"/>
+    <ItemGroup>
+      <Content Include="$(IntermediateOutputPath)libemi_trace.so" Link="libemi_trace.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true"/>
+    </ItemGroup>
+  </Target>
+</Project>

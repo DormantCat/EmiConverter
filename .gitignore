@@ -1,0 +1,17 @@
+# Результаты сборки
+bin/
+obj/
+dist/
+*.exe
+*.dll
+*.so
+*.zip
+
+# IDE и система
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+Thumbs.db
+.DS_Store
