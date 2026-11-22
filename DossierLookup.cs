@@ -99,8 +99,8 @@ internal sealed class DossierLookup(HttpClient http)
     {
         var bytes = ip.GetAddressBytes();
         return ip.AddressFamily == AddressFamily.InterNetwork
-            ? string.Join('.', bytes.Reverse()) + ".in-addr.arpa"
-            : string.Join('.', Convert.ToHexString(bytes).ToLowerInvariant().Reverse()) + ".ip6.arpa";
+            ? string.Join('.', Enumerable.Reverse(bytes)) + ".in-addr.arpa"
+            : string.Join('.', Enumerable.Reverse(Convert.ToHexString(bytes).ToLowerInvariant())) + ".ip6.arpa";
     }
 
     private async Task<string> NetworkWhoisAsync(IPAddress ip, CancellationToken token)

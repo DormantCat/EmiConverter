@@ -3,7 +3,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework Condition="'$(LegacyWindows)' != 'true'">net9.0-windows</TargetFramework>
     <TargetFramework Condition="'$(LegacyWindows)' == 'true'">net6.0-windows</TargetFramework>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>13</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

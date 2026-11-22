@@ -14,11 +14,11 @@ on:
 permissions:
   contents: read
 
+# Версия SDK задана в global.json (9.0.200). Без него на раннерах GitHub
+# берётся самый новый SDK, а не 9.0.200. 9.0.200 собирает EXE с .NET 9.0.2,
+# как описано в SECURITY-REVIEW.md, с тем же SHA-256, что у локальной сборки.
+# Если сменить SDK, изменятся версия .NET внутри EXE и хеш: обновите SECURITY-REVIEW.md.
 env:
-  # SDK 9.0.200 собирает EXE с .NET 9.0.2, как описано в SECURITY-REVIEW.md,
-  # и даёт тот же SHA-256, что и локальная сборка. Если сменить SDK, изменятся
-  # версия .NET внутри EXE и хеш: обновите SECURITY-REVIEW.md.
-  DOTNET_SDK: '9.0.200'
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   DOTNET_NOLOGO: '1'
 
@@ -30,7 +30,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_SDK }}
+          global-json-file: global.json
 
       - name: Сверить тег с версией в EmiConverter.csproj
         if: startsWith(github.ref, 'refs/tags/')
@@ -45,7 +45,9 @@ jobs:
           }
 
       - name: Сборка
-        run: dotnet msbuild build.proj -p:Platform=windows
+        run: |
+          dotnet --version
+          dotnet msbuild build.proj -p:Platform=windows
 
       - name: Подготовить файл
         shell: pwsh
@@ -67,10 +69,12 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_SDK }}
+          global-json-file: global.json
 
       - name: Сборка
-        run: dotnet msbuild build.proj -p:Platform=linux
+        run: |
+          dotnet --version
+          dotnet msbuild build.proj -p:Platform=linux
 
       - name: Упаковать каталог
         run: |
