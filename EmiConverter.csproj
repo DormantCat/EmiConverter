@@ -13,6 +13,10 @@
     <Version>1.0.11</Version>
     <ApplicationIcon>EmiConverter.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- В git-репозитории SDK дописывает хеш коммита в версию (v1.0.11+abc…) и адрес репозитория в EXE:
+         меняются надпись версии в окне и SHA-256. Отключено, чтобы сборка в GitHub совпадала с локальной. -->
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="*.cs"/>
